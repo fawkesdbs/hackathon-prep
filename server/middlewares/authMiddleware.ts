@@ -1,24 +1,14 @@
-// middlewares/authMiddleware.ts
-
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from "../config/db";
-import { User } from "@supabase/supabase-js"; // Import the specific User type
+import jwt from 'jsonwebtoken';
 
-// This block consistently defines the 'user' property on the Request object.
-// This should be the single source of truth for this type definition.
-declare global {
-  namespace Express {
-    export interface Request {
-      user?: User;
-    }
+// Extend Express Request type locally
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: any;
   }
 }
 
-const authMiddleware = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -26,32 +16,14 @@ const authMiddleware = async (
   }
 
   const token = authHeader.split(" ")[1];
+  const JWT_SECRET = process.env.JWT_SECRET || "default_secret";
 
   try {
-    // Use Supabase's built-in method to verify the token
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(token);
-
-    if (error) {
-      console.error("Supabase auth error:", error.message);
-      return res
-        .status(401)
-        .json({ message: error.message || "Invalid token" });
-    }
-
-    if (!user) {
-      return res.status(401).json({ message: "User not found for this token" });
-    }
-
-    // Attach the authenticated user object to the request
-    req.user = user;
-
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
     next();
-  } catch (error: any) {
-    console.error("Auth middleware catch block error:", error);
-    res.status(401).json({ message: "Not authorized, token failed" });
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid or expired token" });
   }
 };
 
